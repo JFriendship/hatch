@@ -1,24 +1,25 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 
-def get_device() -> str:
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    return device
-
 def load_qwen_generator():
-    device = get_device()
-
-    model_id = "Qwen/Qwen2.5-3B" 
+    model_id = "Qwen/Qwen3-4B-Instruct-2507" 
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id).to(device) # type: ignore
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, 
+        torch_dtype="auto", 
+        low_cpu_mem_usage=True, 
+        device_map="auto"
+    ) 
 
     generator = pipeline(
         task="text-generation",
         model=model,
         tokenizer=tokenizer,
-        return_full_text=False, # Asking to include prompt in response
-        max_new_tokens=100,
-        do_sample=False # Always the same output. Equivalent to temperature=0
+        return_full_text=False, # Don't want to include prompt in response
+        max_new_tokens=250,
+        do_sample=True, 
+        temperature=0.7,
+        top_p=0.9
     )
 
     return generator

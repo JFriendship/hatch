@@ -1,0 +1,31 @@
+.message {
+    font-size: 16px;
+    max-width: 70%;
+    margin-left: 20px;
+    margin: 10px;
+    /* border: 2px solid var(--accent-border); */
+    border: 0;
+    border-radius: 4px;
+    overflow-wrap: break-word;
+    
+    
+    color: var(--text-h)
+}
+
+.message.user {
+    background-color: var(--accent-bg);
+    color: var(--text-h);
+
+    align-self: flex-end;
+    text-align: right;
+
+    padding: 4px;
+}
+
+.message.assistant {
+    /* background-color: var(--social-bg); */
+    padding: 4px;
+    align-self: flex-start;
+    text-align: left;
+}
+

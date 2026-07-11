@@ -1,0 +1,52 @@
+.input-container {
+    position: fixed;
+    display: inline-block;
+    width: 100%;
+    max-width: 600px;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    
+    border-radius: 4px;
+}
+
+.chat-input {
+    box-shadow: var(--shadow);
+    width: 100%;
+    padding: 12px;
+    box-sizing: border-box;
+
+    justify-content: center;
+
+    font-size: 16px;
+
+    border-radius: 8px;
+    border: 0;
+
+    padding-right: 80px;
+}
+
+.chat-input:focus {
+    outline: none;
+}
+
+.submit-text-button {
+    /* Positioning */
+    position: absolute;
+    bottom: 10px;
+    left: 98%;
+    transform: translateX(-98%);
+    
+    cursor: pointer;
+
+    border: 0;
+    border-radius: 8px;
+    padding: 4px 12px;
+    background-color: var(--border);
+    color: var(--text)
+}
+
+.submit-text-button:hover {
+    background-color: var(--text-h);
+    color: var(--border)
+}
