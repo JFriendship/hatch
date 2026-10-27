@@ -16,7 +16,7 @@ def load_qwen_generator():
         model=model,
         tokenizer=tokenizer,
         return_full_text=False, # Don't want to include prompt in response
-        max_new_tokens=250,
+        max_new_tokens=50,
         do_sample=True, 
         temperature=0.7,
         top_p=0.9
