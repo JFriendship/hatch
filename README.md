@@ -28,7 +28,44 @@ The backend stores the generation pipeline in application state. A FastAPI depen
 
 ## Getting started
 
-### Prerequisites
+### Run with Docker Compose
+
+Install Docker with the Docker Compose plugin (Docker Desktop includes both), and make sure Docker is running. You do not need Python or Node.js installed on your host for this option. Allow enough disk space for the images and model cache, and enough memory for the 4B-parameter model; Docker Desktop must have sufficient memory allocated to its virtual machine.
+
+From the repository root, build and start both services:
+
+```bash
+docker compose up --build
+```
+
+Open [http://localhost:5173](http://localhost:5173) once the frontend is running.
+
+> **First-launch warning:** downloading the model and tokenizer can take about **10 minutes**, depending on your connection and hardware. Internet access is required for this download. The frontend may open before the backend is ready; wait for `Application startup complete` in the backend logs before sending a prompt. Startup also includes loading the model into memory.
+
+Downloaded model files are stored in the named Docker volume `huggingface_cache`, mounted at `/home/appuser/.cache/huggingface` in the backend container. Compose normally prefixes the volume name with the project name (for example, `hatch_huggingface_cache`). The cache survives container recreation, image rebuilds, and `docker compose down`, so later launches reuse the download. The model must still load into memory on each backend startup. Changing the Compose project name creates a separate volume and may trigger another download.
+
+To run in the background and follow backend startup:
+
+```bash
+docker compose up --build -d
+docker compose logs -f backend
+```
+
+Stop the services while keeping the model cache:
+
+```bash
+docker compose down
+```
+
+**Cache reset:** `docker compose down --volumes` also deletes the model cache and other Compose-managed volumes. Use it only when you intend to discard that data; the next launch will download the model again.
+
+The API is exposed at [http://localhost:8000](http://localhost:8000), with interactive documentation at [http://localhost:8000/docs](http://localhost:8000/docs) after startup completes. Ports `5173` and `8000` must be available on your host.
+
+The current Docker image installs **CPU-only PyTorch** and does not configure GPU acceleration. Generation can be slow, even after the initial download. The Compose setup runs the Vite development server and mounts the source directories into the containers; it is intended for local development. Backend source changes require a service restart (`docker compose restart backend`); dependency or Dockerfile changes require rebuilding the affected image.
+
+### Run without Docker
+
+#### Prerequisites
 
 - Python 3 with virtual environment support and a compatible [PyTorch installation](https://pytorch.org/get-started/locally/).
 - Node.js and npm compatible with the project's Vite version. See [Vite prerequisites](https://vite.dev/guide/).
@@ -37,7 +74,7 @@ The backend stores the generation pipeline in application state. A FastAPI depen
 
 The commands below assume a macOS or Linux shell.
 
-### Backend
+#### Backend
 
 From the repository root:
 
@@ -47,20 +84,19 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 python -m pip install -r requirements.txt
-python -m pip install torch transformers accelerate
 
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-The current `requirements.txt` does not include the model libraries, so they are installed separately above. These additional dependencies are not yet pinned. Use a Transformers version that supports Qwen3; see the [model card](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507).
+`backend/requirements.txt` pins the backend and model dependencies, including PyTorch, Transformers, and Accelerate.
 
-The first startup downloads the model and tokenizer. Subsequent startups can reuse cached files but still need to load the model into memory. Wait for startup to finish before submitting requests.
+The first startup downloads the model and tokenizer and can take about **10 minutes**. When running without Docker, these files use the host's Hugging Face cache (normally `~/.cache/huggingface`), separate from the Docker volume. Subsequent startups can reuse cached files but still need to load the model into memory. Wait for `Application startup complete` before submitting requests.
 
 Interactive API documentation is available at:
 
 <http://localhost:8000/docs>
 
-### Frontend
+#### Frontend
 
 In a second terminal, from the repository root:
 
@@ -112,7 +148,7 @@ Settings are defined in `backend/app/services/model_inference.py`.
 | Model | `Qwen/Qwen3-4B-Instruct-2507` |
 | Device placement | `auto` |
 | Model dtype | `auto` |
-| Maximum new tokens | `250` |
+| Maximum new tokens | `50` |
 | Sampling enabled | `True` |
 | Temperature | `0.7` |
 | Top-p | `0.9` |
@@ -124,6 +160,7 @@ Generation settings are configured in source rather than supplied per request.
 
 ```text
 hatch/
+├── docker-compose.yml
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
@@ -132,6 +169,7 @@ hatch/
 │   │   │   └── routes/generate_text.py
 │   │   ├── schemas/model_inference.py
 │   │   └── services/model_inference.py
+│   ├── Dockerfile
 │   └── requirements.txt
 └── frontend/
     ├── src/
@@ -139,6 +177,7 @@ hatch/
     │   ├── components/
     │   ├── types/chat.ts
     │   └── App.tsx
+    ├── Dockerfile
     └── package.json
 ```
 
@@ -158,7 +197,17 @@ Run from `frontend/`:
 ```bash
 npm run lint
 npm run build
-npm run preview
+npm run preview -- --host localhost --port 5173 --strictPort
 ```
 
-The build command performs TypeScript checking before bundling. Preview serves an existing frontend build; the backend must be started separately.
+The build command performs TypeScript checking before bundling into `frontend/dist/`. Preview requires a successful build first; it does not build the app itself. Open [http://localhost:5173](http://localhost:5173) after starting preview with the command above. Stop any frontend development server or Docker frontend using port `5173` first.
+
+The preview command explicitly uses port `5173` to match the backend's allowed CORS origin. Plain `npm run preview` defaults to port `4173`, which the backend currently does not allow. The backend must be running separately and have finished loading the model for chat requests to work. If you change `VITE_API_URL`, rebuild before restarting preview because the API URL is embedded at build time.
+
+## Troubleshooting
+
+- **Frontend opens but requests fail:** check `docker compose logs -f backend`. The API cannot serve requests until the model finishes downloading and loading. If startup fails, the logs contain the underlying error.
+- **Backend exits or is killed while loading:** check available memory and Docker Desktop's memory allocation. Also check disk space for image builds and the model cache.
+- **Port already in use:** stop the conflicting process or adjust the host port in `docker-compose.yml`. If you change the backend's host port, update `VITE_API_URL`; if you change the frontend's origin, update the backend's CORS configuration as described above.
+
+The Compose port mappings listen on all host interfaces by default. For access only from your computer, bind them to `127.0.0.1` (for example, `127.0.0.1:8000:8000` and `127.0.0.1:5173:5173`). The application has no authentication and should not be exposed as a public service.
