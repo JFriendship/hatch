@@ -1,11 +1,16 @@
 import { useState } from "react";
+import type { SubmitEvent } from "react";
 import "./ChatInput.css"
 
-export function ChatInput({ onSend }) {
+interface ChatInputProps {
+    onSend: (prompt: string) => Promise<void>;
+}
+
+export function ChatInput({ onSend }: ChatInputProps) {
 
     const [text, setText] = useState("");
 
-    async function handleSubmit(event) {
+    async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
         event.preventDefault();
 
         if (!text.trim()) return; 
