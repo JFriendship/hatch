@@ -8,6 +8,8 @@ This project explores LLM inference, model lifecycle management, input validatio
 
 - Loads `Qwen/Qwen3-4B-Instruct-2507` and its tokenizer through Hugging Face Transformers.
 - Initializes the model once during backend startup and reuses it across requests.
+- Includes previous user and assistant messages as context for follow-up prompts.
+- Saves the active conversation to a local JSON file and starts a fresh conversation on backend startup.
 - Validates API requests and responses with Pydantic schemas.
 - Provides a React/TypeScript interface with message display and loading feedback.
 - Supports a configurable backend URL through `VITE_API_URL`.
@@ -18,13 +20,23 @@ This project explores LLM inference, model lifecycle management, input validatio
 React interface
     → FastAPI endpoint
     → Pydantic input validation
+    → Load conversation history and append the user message
     → Hugging Face generation pipeline
-    → Tokenization, generation, and decoding
+    → Chat formatting, tokenization, generation, and decoding
+    → Save the user message and assistant response
     → JSON response
     → Response displayed in the interface
 ```
 
-The backend stores the generation pipeline in application state. A FastAPI dependency makes it available to the inference endpoint.
+The backend stores the generation pipeline and active conversation file path in application state. FastAPI dependencies make them available to the inference endpoint.
+
+## Conversation context
+
+On each backend startup, Hatch creates or overwrites `backend/conversations/main_convo.json` with a system message asking the assistant to answer concisely, usually in 1–3 short sentences. Each successful generation adds the user prompt and assistant response to this file. Later requests load the saved messages and pass them to the Transformers pipeline as a chat conversation, allowing follow-up prompts to refer to earlier exchanges.
+
+The frontend still sends only the latest prompt; the backend supplies the conversation history. All browser tabs and API clients connected to the same backend share this one conversation. Refreshing the browser clears the visible messages but leaves the backend's context intact. Restart the backend to start a fresh conversation; there is no reset or history-retrieval endpoint.
+
+Conversation files are excluded from Git and the Docker build context. With Docker Compose, the backend source mount stores the file at `backend/conversations/main_convo.json` on the host. The standalone backend image creates a writable `/app/conversations` directory for its runtime file. Existing history is overwritten on startup in either setup.
 
 ## Getting started
 
@@ -120,7 +132,7 @@ The backend's CORS configuration currently permits `http://localhost:5173`. Upda
 
 ### `POST /gentext/qweninference`
 
-Accepts a `prompt` string between 1 and 2,000 characters.
+Accepts a `prompt` string between 1 and 2,000 characters. The backend adds this prompt to the shared conversation history before generation; clients do not need to send previous messages or a conversation ID.
 
 ```bash
 curl -X POST http://localhost:8000/gentext/qweninference \
@@ -148,13 +160,14 @@ Settings are defined in `backend/app/services/model_inference.py`.
 | Model | `Qwen/Qwen3-4B-Instruct-2507` |
 | Device placement | `auto` |
 | Model dtype | `auto` |
-| Maximum new tokens | `50` |
+| Maximum new tokens | `256` |
 | Sampling enabled | `True` |
 | Temperature | `0.7` |
 | Top-p | `0.9` |
 | Return input prompt with output | `False` |
 
 Generation settings are configured in source rather than supplied per request.
+The initial system message is configured in `backend/app/main.py`.
 
 ## Project structure
 
@@ -170,6 +183,8 @@ hatch/
 │   │   ├── schemas/model_inference.py
 │   │   └── services/model_inference.py
 │   ├── Dockerfile
+│   ├── conversations/          # Created at runtime; ignored by Git
+│   │   └── main_convo.json
 │   └── requirements.txt
 └── frontend/
     ├── src/
@@ -183,11 +198,12 @@ hatch/
 
 ## Current limitations
 
-- **Single-turn inference:** the interface displays message history, but each request sends only the latest prompt. History is cleared on refresh.
-- **Plain-text prompting:** the backend passes a raw prompt string without explicitly applying a chat template. Responses may continue the prompt instead of answering it directly.
+- **One shared conversation:** all clients use the same history, with no separate users or sessions. Concurrent requests can overwrite each other's conversation updates because file access is not synchronized.
+- **Limited history lifecycle:** messages are saved locally during a backend run, but startup overwrites the file. The interface does not reload saved history after a browser refresh, and there is no conversation selection or reset control.
+- **Unbounded context growth:** the backend sends the entire conversation on each request without trimming or summarizing it. Long conversations can slow generation or exceed the model's context limit.
 - **One configured model:** model selection is not exposed through the interface or API.
 - **Basic error handling:** the API client detects failed requests, but the interface does not display a dedicated error message.
-- **Local prototype:** authentication, rate limiting, streaming, and persistent storage are not implemented.
+- **Local prototype:** authentication, rate limiting, streaming, and durable conversation storage across backend restarts are not implemented.
 - **Evaluation:** automated tests, model-quality evaluations, and latency benchmarks are not currently included.
 
 ## Frontend development
