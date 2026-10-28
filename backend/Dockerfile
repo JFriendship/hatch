@@ -18,7 +18,10 @@ RUN useradd -m appuser && \
 
 # Copies app files into the docker image and assigns ownership to the appuser
 COPY --chown=appuser:appuser app/ ./app/
-    
+
+RUN mkdir -p /app/conversations \
+    && chown appuser:appuser /app/conversations
+
 USER appuser
 
 EXPOSE 8000
